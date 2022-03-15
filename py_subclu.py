@@ -1,5 +1,4 @@
 import sklearn
-import sklearn.cluster, sklearn.datasets
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +8,6 @@ import pandas as pd
 from tqdm.auto import tqdm
 import math
 from scipy.special import gamma
-import umap
 import scipy
 
 def generate_dbscan_clusters(X, eps, m):
@@ -51,7 +49,7 @@ def generate_1D_clusters(X, eps, m):
             S.add(frozenset({a})) # frozenset because sets are mutable (thus non hashable)
     return C, S
 
-def generate_candidates(Sk):
+def generate_candidates(Sk, verbose=0):
     """
     Generate (k+1)-Dimensional candidates from k-dimensional subspaces
     by merging subspaces sharing k-1 common attributes 
@@ -72,7 +70,7 @@ def generate_candidates(Sk):
         for a in cand:
             s = cand.difference(set({a}))
             if not s in Sk:
-                print("pruning candidate : ",cand)
+                if verbose: print("pruning candidate : ",cand)
                 to_prune.add(cand)
                 break
     cands -= to_prune
@@ -114,7 +112,11 @@ def generate_clusters(X, C, Sk, cands, eps, m):
                     
     return cl_cand, s_cands
 
-def SUBCLU(X, eps, m):
+def SUBCLU(X, eps, m, verbose=0):
+    """
+    Main algorithm
+    """
+    
     C1, S1 = generate_1D_clusters(X,eps,m)
     
     C = [C1]
@@ -122,7 +124,7 @@ def SUBCLU(X, eps, m):
     
     while len(C[-1])>0:
         print("Computing {}-dim clusters".format(len(C)+1))
-        cands = generate_candidates(S[-1])
+        cands = generate_candidates(S[-1], verbose=verbose)
         Ck, Sk = generate_clusters(X, C[-1], S[-1], cands, eps, m)
         C.append(Ck)
         S.append(Sk)
@@ -161,14 +163,17 @@ def clusters_list_to_dataframe(C,Q):
         df.loc[i,"Indices"]=cl.index
     return df
 
-def draw_subspaces_clusters(X,df_C,limit=None):
+def draw_subspaces_clusters(X,X_scaled,df_C,limit=None):
     """
     Draw a figure for each subspace, coloring each dataset
-    Using UMAP for subspaces of dimension > 2
+    For subspaces of dimension 1, using jitter to get an idea of the density
+    For subspaces of dimension 2, use directly the 2 dimensions
+    For subspaces of dimension 3, plot both the 3D representation and the UMAP projection
+    For subspaces of dimension >3, plot only the UMAP projection
     """
     
     subspaces_ordered_list = df_C.sort_values("Subspace quality",ascending=False)["Subspace"].drop_duplicates()
-    X_scaled = pd.DataFrame(sklearn.preprocessing.StandardScaler().fit_transform(X),columns=X.columns)
+    #X_scaled = pd.DataFrame(sklearn.preprocessing.StandardScaler().fit_transform(X),columns=X.columns)
     
     if not limit:
         limit=subspaces_ordered_list.shape[0]
@@ -227,3 +232,76 @@ def draw_subspaces_clusters(X,df_C,limit=None):
                 plt.scatter(x=reducer.embedding_[ic,0],y=reducer.embedding_[ic,1])
         plt.title("Subspace " + str(s) + " with quality "+ str(df_C.loc[df_C["Subspace"]==s,"Subspace quality"].mean()))
         plt.show()
+        
+def fullSUBCLU(X, eps=0.5, m=5, scaler=sklearn.preprocessing.StandardScaler(), verbose=0, draw_results=True, draw_limit=None):
+    """
+    Transform the input X with the scaler.
+    Apply SUBCLU to get the relevant clusters and subspaces.
+    Compute subspace quality and draw subspaces by descending quality.
+    
+    Parameters
+    ----------
+    X : DataFrame
+        Input data
+        
+    eps : float
+        The maximum distance between two samples for one to be considered
+        as in the neighborhood of the other. This is not a maximum bound
+        on the distances of points within a cluster. This is the most
+        important DBSCAN parameter to choose appropriately for your data set
+        and distance function.
+
+    m : int
+        The number of samples (or total weight) in a neighborhood for a point
+        to be considered as a core point. This includes the point itself.
+        
+    scaler : None or function
+        The scaler we want to transform the data with. Needs to have a
+        fit_transform function. Specify None if you want to cluster the
+        input data directly.
+        
+    verbose : int
+        Verbosity of the prints in the console.
+        At 0, shows nothing
+        At 1, shows tqdm progression bars for clustering
+        At 2, shows candidates pruning
+        
+    draw_results : bool
+        If true, for the limit number of clusters of best quality, draw their
+        representation. See draw_subspaces_clusters for more information.
+        
+    draw_limit : None or int
+        Useless if draw_results=False
+        If draw_results=True and None, draw all the subspaces and clusters found
+        If draw_results=True and int, draw this number of best subspaces
+        
+    Returns
+    ----------
+    C : 2D list of DataFrames
+        List of clusters as DataFrames. C[i] contains all the clusters
+        belonging to subspaces of dimension (i+1).
+        
+    S : list of set of sets
+        List of set of subspaces. S[i] contains all the subspaces of
+        dimension (i+1).
+        
+    df_C : DataFrame
+        DataFrame with the Clusters and their informations, as well as
+        subspaces informations.
+    """
+    
+    if scaler:
+        X_scaled = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
+    else:
+        X_scaled = X
+        
+    C, S = SUBCLU(X_scaled, eps=eps, m=m, verbose=verbose)
+    
+    Q = allSubspacesQuality(X=X_scaled, S=[s for sublist in S for s in sublist], eps=eps, m=m)
+    
+    df_C = clusters_list_to_dataframe(C, Q)
+    
+    if draw_results:
+        draw_subspaces_clusters(X,X_scaled,df_C,limit=draw_limit)
+        
+    return C, S, df_C
