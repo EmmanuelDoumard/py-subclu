@@ -1,6 +1,7 @@
 # py-subclu
-Python package for the subspace clustering method SUBCLU and custom variants
-Algorithm is based on [1], subspace quality metric is based on [2]
+Python package for the subspace clustering method SUBCLU and custom variants.
+
+Algorithm is based on [1], subspace quality metric is based on [2].
 
 [1]K. Kailing, H.-P. Kriegel, et P. Kröger, « Density-Connected Subspace Clustering for High-Dimensional Data », in Proceedings of the 2004 SIAM International Conference on Data Mining, avr. 2004, p. 246‑256. doi: 10.1137/1.9781611972740.23.
 
