@@ -210,7 +210,7 @@ def draw_subspaces_clusters(X,X_scaled,df_C,limit=None):
             ax.set_zlabel(z_label)
             total_ic=[]
             for i,ic in enumerate(df_C.loc[df_C["Subspace"]==s,"Indices"]):
-                ax.scatter(xs=X.loc[ic,x_label],ys=X.loc[ic,y_label],zs=X.loc[ic,z_label],c=plt.rcParams['axes.prop_cycle'].by_key()['color'][i+1])
+                ax.scatter(xs=X.loc[ic,x_label],ys=X.loc[ic,y_label],zs=X.loc[ic,z_label],c=plt.rcParams['axes.prop_cycle'].by_key()['color'][(i+1)%len(plt.rcParams['axes.prop_cycle'].by_key()['color'])])
                 total_ic.append(ic)
             nc = np.setdiff1d(X.index,np.array([ic for sublist in total_ic for ic in sublist]))
             ax.scatter(xs=X.loc[nc,x_label],ys=X.loc[nc,y_label],zs=X.loc[nc,z_label])
@@ -305,3 +305,63 @@ def fullSUBCLU(X, eps=0.5, m=5, scaler=sklearn.preprocessing.StandardScaler(), v
         draw_subspaces_clusters(X,X_scaled,df_C,limit=draw_limit)
         
     return C, S, df_C
+
+def basic_dbscan_plot(X, eps, m, scaler=None):
+    if scaler:
+        X_scaled = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
+    else:
+        X_scaled = X
+        
+    dbscan = sklearn.cluster.DBSCAN(eps=eps,min_samples=m).fit(X)
+    labels = dbscan.labels_
+    print(labels)
+    
+    fig = plt.figure(figsize=(9,4))
+    if X.shape[1]==1:
+        rand_jitter = (np.random.rand(X.shape[0])-0.5)*0.2
+        plt.ylim([-1,1])
+        plt.xlabel(X.columns[0])
+        plt.ylabel("Jitter")
+        plt.scatter(x=X.iloc[:,0],y=rand_jitter)
+        for ic in np.unique(labels[labels>=0]):
+            plt.scatter(x=X.loc[labels==ic,X.columns[0]],y=rand_jitter[labels==ic])
+                
+    elif X.shape[1]==2:
+        x_label = X.columns[0]
+        y_label = X.columns[1]
+        plt.xlabel(x_label)
+        plt.ylabel(y_label)
+        plt.scatter(x=X.loc[:,x_label],y=X.loc[:,y_label])
+        for ic in np.unique(labels[labels>=0]):
+            plt.scatter(x=X.loc[labels==ic,x_label],y=X.loc[labels==ic,y_label])
+            
+    elif X.shape[1]==3:
+        plt.gcf().set_size_inches(18.5,10.5)
+        ax = fig.add_subplot(1,2,1,projection="3d")
+        x_label = X.columns[0]
+        y_label = X.columns[1]
+        z_label = X.columns[2]
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_zlabel(z_label)
+        total_ic=[]
+        for i,ic in enumerate(np.unique(labels[labels>=0])):
+            ax.scatter(xs=X.loc[labels==ic,x_label],ys=X.loc[labels==ic,y_label],zs=X.loc[labels==ic,z_label],c=plt.rcParams['axes.prop_cycle'].by_key()['color'][(i+1)%len(plt.rcParams['axes.prop_cycle'].by_key()['color'])])
+        ax.scatter(xs=X.loc[labels==-1,x_label],ys=X.loc[labels==-1,y_label],zs=X.loc[labels==-1,z_label])
+        
+        ax2 = fig.add_subplot(1,2,2)
+        reducer = umap.UMAP().fit(X_scaled)
+        ax2.set_xlabel("UMAP X")
+        ax2.set_ylabel("UMAP Y")
+        ax2.scatter(x=reducer.embedding_[:,0],y=reducer.embedding_[:,1])
+        for ic in np.unique(labels[labels>=0]):
+            ax2.scatter(x=reducer.embedding_[labels==ic,0],y=reducer.embedding_[labels==ic,1])
+            
+    else : ## >3-dim subspaces
+        reducer = umap.UMAP().fit(X_scaled)
+        plt.xlabel("UMAP X")
+        plt.ylabel("UMAP Y")
+        plt.scatter(x=reducer.embedding_[:,0],y=reducer.embedding_[:,1])
+        for ic in np.unique(labels[labels>=0]):
+            plt.scatter(x=reducer.embedding_[labels==ic,0],y=reducer.embedding_[labels==ic,1])
+    plt.show()    
